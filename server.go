@@ -60,3 +60,34 @@ func (s *Server) handleConn(conn net.Conn) {
 		fmt.Println(string(msg))
 	}
 }
+
+func (s *Server) handleCommand(conn net.Conn, rawCmd []byte) {
+	msg, err := parseMessage(rawCmd)
+	if err != nil {
+		fmt.Println("failed to parse command")
+		return
+	}
+
+	switch msg.Cmd {
+	case CMDGet:
+		s.handleGetCmd(conn, msg)
+	case CMDSet:
+		s.handleSetCmd(conn, msg)
+	}
+}
+
+func (s *Server) handleSetCmd(conn net.Conn, msg *Message) error {
+	if err := s.cache.Set(msg.Key, msg.Value, msg.TTL); err != nil {
+		return fmt.Errorf("cannot set this key-value: %w", err)
+	}
+
+	return nil
+}
+func (s *Server) handleGetCmd(conn net.Conn, msg *Message) ([]byte, error) {
+	value, err := s.cache.Get(msg.Key)
+	if err != nil {
+		return []byte{}, fmt.Errorf("cannot set this key-value: %w", err)
+	}
+
+	return value, nil
+}

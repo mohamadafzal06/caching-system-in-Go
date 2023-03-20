@@ -17,11 +17,17 @@ func New() *Cache {
 	}
 }
 
-func (c *Cache) Set(k []byte, v []byte, _ time.Duration) error {
+func (c *Cache) Set(k []byte, v []byte, ttl time.Duration) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.data[string(k)] = v
+
+	//ticker := time.NewTicker(ttl)
+	go func() {
+		<-time.After(ttl)
+		delete(c.data, string(k))
+	}()
 
 	return nil
 }
