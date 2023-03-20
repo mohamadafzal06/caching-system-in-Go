@@ -1,30 +1,33 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"net"
 	"time"
 
 	"github.com/mohamadafzal06/cache-in-go/cache"
 )
 
 func main() {
-	c := cache.New()
-
-	c.Set([]byte("m"), []byte("a"), time.Minute)
-	d, err := c.Get([]byte("m"))
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	fmt.Println(string(d))
-
-	b := c.Has([]byte("m"))
-	if !b {
-		fmt.Println("the is no key")
+	opts := ServerOpts{
+		ListenAddr: ":4000",
+		IsLeader:   true,
 	}
 
-	err = c.Delete([]byte("m"))
+	go func() {
+		time.Sleep(2 * time.Second)
+		conn, err := net.Dial("tcp", ":4000")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		conn.Write([]byte("set foo bar"))
+	}()
+
+	server := NewServer(opts, cache.New())
+	err := server.Start()
 	if err != nil {
-		fmt.Println(err.Error())
+		panic("server cannot start")
 	}
 
 }
