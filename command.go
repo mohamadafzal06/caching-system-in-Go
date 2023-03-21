@@ -51,7 +51,7 @@ func parseMessage(raw []byte) (*Message, error) {
 			return nil, fmt.Errorf("invalid SET command")
 		}
 		msg.Value = []byte(parts[2])
-		n, err := strconv.Atoi(parts[2])
+		n, err := strconv.Atoi(parts[3])
 		if err != nil {
 			log.Println("invalid SET TTl")
 		}
