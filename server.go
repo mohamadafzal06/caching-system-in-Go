@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -11,6 +13,7 @@ import (
 type ServerOpts struct {
 	ListenAddr string
 	IsLeader   bool
+	//LeaderAddr string
 }
 
 type Server struct {
@@ -57,6 +60,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 
 		msg := buf[:n]
+		go s.handleCommand(conn, msg)
 		fmt.Println(string(msg))
 	}
 }
@@ -68,12 +72,35 @@ func (s *Server) handleCommand(conn net.Conn, rawCmd []byte) {
 		return
 	}
 
+	fmt.Printf("recieve command from %s\n", msg.Cmd)
+
 	switch msg.Cmd {
 	case CMDGet:
-		s.handleGetCmd(conn, msg)
+		err = s.handleGetCmd(conn, msg)
+		if err != nil {
+			log.Println("failed to parse command", err)
+			conn.Write([]byte(err.Error()))
+			return
+		}
 	case CMDSet:
-		s.handleSetCmd(conn, msg)
+		if bytes.Equal(msg.Value, []byte{}) {
+			log.Println("there is no value to set")
+			conn.Write([]byte(fmt.Sprintln("there is no value to set")))
+			return
+		}
+
+		err = s.handleSetCmd(conn, msg)
+		if err != nil {
+			log.Println("failed to parse command", err)
+			conn.Write([]byte(err.Error()))
+			return
+		}
 	}
+
+	//if err != nil {
+	//	log.Println("failed to parse command", err)
+	//	conn.Write([]byte(err.Error()))
+	//}
 }
 
 func (s *Server) handleSetCmd(conn net.Conn, msg *Message) error {
@@ -81,13 +108,26 @@ func (s *Server) handleSetCmd(conn net.Conn, msg *Message) error {
 		return fmt.Errorf("cannot set this key-value: %w", err)
 	}
 
+	go s.sendToFollowers(context.TODO(), msg)
+
 	return nil
 }
-func (s *Server) handleGetCmd(conn net.Conn, msg *Message) ([]byte, error) {
+
+func (s *Server) handleGetCmd(conn net.Conn, msg *Message) error {
 	value, err := s.cache.Get(msg.Key)
 	if err != nil {
-		return []byte{}, fmt.Errorf("cannot set this key-value: %w", err)
+		return fmt.Errorf("cannot set this key[%s]-value[%s]: %w",
+			string(msg.Key),
+			string(msg.Value), err)
 	}
 
-	return value, nil
+	_, err = conn.Write(value)
+	if err != nil {
+		return fmt.Errorf("cannot get value of this key[%s]: %w", string(msg.Key), err)
+	}
+	return nil
+}
+
+func (s *Server) sendToFollowers(ctx context.Context, msg *Message) error {
+	return nil
 }
