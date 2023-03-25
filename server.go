@@ -13,17 +13,19 @@ import (
 type ServerOpts struct {
 	ListenAddr string
 	IsLeader   bool
-	//LeaderAddr string
+	LeaderAddr string
 }
 
 type Server struct {
 	ServerOpts
-	cache cache.Cacher
+	followers map[net.Conn]struct{}
+	cache     cache.Cacher
 }
 
 func NewServer(opts ServerOpts, c cache.Cacher) *Server {
 	return &Server{
 		ServerOpts: opts,
+		followers:  make(map[net.Conn]struct{}),
 		cache:      c,
 	}
 
@@ -35,7 +37,21 @@ func (s *Server) Start() error {
 		return fmt.Errorf("starting the servert failed: %w", err)
 	}
 
-	log.Printf("server starting on port[%s]\n", s.ListenAddr)
+	log.Printf("server starting on port [%s]\n", s.ListenAddr)
+
+	if !s.IsLeader {
+		go func() {
+			conn, err := net.Dial("tcp", s.LeaderAddr)
+			if err != nil {
+				log.Fatalf("cannot connect to leader: %v\n", err)
+			}
+
+			fmt.Println("connected with leader:", s.LeaderAddr)
+
+			s.handleConn(conn)
+		}()
+
+	}
 
 	for {
 		conn, err := ln.Accept()
@@ -52,11 +68,18 @@ func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 
 	buf := make([]byte, 2048)
+
+	// TODO: bad implementation: refactore it later
+	if s.IsLeader {
+		s.followers[conn] = struct{}{}
+	}
+
+	fmt.Println("connection made", conn.RemoteAddr())
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Printf("error while reading data from connection: %v", err)
-			break
+			continue
 		}
 
 		msg := buf[:n]
@@ -129,5 +152,15 @@ func (s *Server) handleGetCmd(conn net.Conn, msg *Message) error {
 }
 
 func (s *Server) sendToFollowers(ctx context.Context, msg *Message) error {
+	for conn := range s.followers {
+		fmt.Println("forwarding key to follower")
+		rawMsg := msg.ToBytes()
+		fmt.Println("forwarding raw messag to follower", string(rawMsg))
+		_, err := conn.Write(rawMsg)
+		if err != nil {
+			log.Printf("cannot write to followers: %v\n", err)
+			continue
+		}
+	}
 	return nil
 }

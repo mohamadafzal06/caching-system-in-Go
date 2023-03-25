@@ -64,3 +64,16 @@ func parseMessage(raw []byte) (*Message, error) {
 
 	return msg, nil
 }
+
+func (m *Message) ToBytes() []byte {
+	switch m.Cmd {
+	case CMDGet:
+		ret := fmt.Sprintf("%s %s", m.Cmd, string(m.Key))
+		return []byte(ret)
+	case CMDSet:
+		ret := fmt.Sprintf("%s %s %s %d", m.Cmd, string(m.Key), string(m.Value), m.TTL)
+		return []byte(ret)
+	}
+
+	return []byte{}
+}
