@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -10,21 +11,31 @@ import (
 )
 
 func main() {
-	//var (
-	//	listenAddr string
-	//	leaderAddr string
-	//)
+	var (
+		listenAddr string
+		leaderAddr string
+	)
 
-	//flag.StringVar(&listenAddr, "listenaddr", ":4000", "listen address of the server")
-	//flag.StringVar(&leaderAddr, "leaderaddr", ":4000", "listen address of the leader")
-	//flag.Parse()
+	flag.StringVar(&listenAddr, "listenaddr", ":4000", "listen address of the server")
+	flag.StringVar(&leaderAddr, "leaderaddr", ":3000", "listen address of the leader")
+	flag.Parse()
 
 	opts := ServerOpts{
-		ListenAddr: ":4000",
-		//ListenAddr: listenAddr,
-		IsLeader: true,
-		//LeaderAddr: leaderAddr,
+		//ListenAddr: ":4000",
+		ListenAddr: listenAddr,
+		IsLeader:   len(leaderAddr) == 0,
+		LeaderAddr: leaderAddr,
 	}
+
+	//conn, err := net.Dial("tcp", ":4000")
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+
+	//_, err = conn.Write([]byte("SET foo bar 5_000_000"))
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	go func() {
 		time.Sleep(2 * time.Second)

@@ -43,7 +43,7 @@ func (c *Cache) Get(k []byte) ([]byte, error) {
 		return []byte{}, fmt.Errorf("there is no value for this key: %s", string(k))
 	}
 
-	log.Printf("GET %s -> [%s]\n", string(k), string(v))
+	log.Printf("GET %s -> %s\n", string(k), string(v))
 
 	return v, nil
 }
