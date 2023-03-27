@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"github.com/mohamadafzal06/cache-in-go/cache"
+	"github.com/mohamadafzal06/cache-in-go/client"
 )
 
 func main() {
@@ -16,48 +16,39 @@ func main() {
 		leaderAddr string
 	)
 
-	flag.StringVar(&listenAddr, "listenaddr", ":4000", "listen address of the server")
-	flag.StringVar(&leaderAddr, "leaderaddr", ":3000", "listen address of the leader")
+	flag.StringVar(&listenAddr, "listenaddr", ":3000", "listen address of the server")
+	flag.StringVar(&leaderAddr, "leaderaddr", "", "listen address of the leader")
 	flag.Parse()
 
 	opts := ServerOpts{
-		//ListenAddr: ":4000",
 		ListenAddr: listenAddr,
 		IsLeader:   len(leaderAddr) == 0,
 		LeaderAddr: leaderAddr,
 	}
 
-	//conn, err := net.Dial("tcp", ":4000")
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
-	//_, err = conn.Write([]byte("SET foo bar 5_000_000"))
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
 	go func() {
 		time.Sleep(2 * time.Second)
-		conn, err := net.Dial("tcp", ":4000")
+		client, err := client.New(":3000", client.Options{})
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("cannot connect to the server: %v", err)
+		}
+		for i := 0; i < 10; i++ {
+			sendCommand(client)
+			time.Sleep(200 * time.Millisecond)
 		}
 
-		conn.Write([]byte("SET foo bar 250000000000000000"))
-
-		time.Sleep(2 * time.Second)
-
-		conn.Write([]byte("GET foo"))
-		buf := make([]byte, 1024)
-		n, _ := conn.Read(buf)
-		fmt.Println(string(buf[:n]))
+		client.Close()
 	}()
 
 	server := NewServer(opts, cache.New())
-	err := server.Start()
+
+	server.Start()
+}
+
+func sendCommand(c *client.Client) {
+	err := c.Set(context.Background(), []byte("fii"), []byte("mii"), 50000)
 	if err != nil {
-		panic("server cannot start")
+		log.Fatalf("cannot connect to the server: %v", err)
 	}
 
 }

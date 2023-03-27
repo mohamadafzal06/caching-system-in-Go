@@ -26,10 +26,12 @@ func (c *Cache) Set(k []byte, v []byte, ttl time.Duration) error {
 	log.Printf("SET %s to %s\n", string(k), string(v))
 
 	//ticker := time.NewTicker(ttl)
-	go func() {
-		<-time.After(ttl)
-		delete(c.data, string(k))
-	}()
+	if ttl > 0 {
+		go func() {
+			<-time.After(ttl)
+			delete(c.data, string(k))
+		}()
+	}
 
 	return nil
 }
@@ -43,7 +45,7 @@ func (c *Cache) Get(k []byte) ([]byte, error) {
 		return []byte{}, fmt.Errorf("there is no value for this key: %s", string(k))
 	}
 
-	log.Printf("GET %s -> %s\n", string(k), string(v))
+	//log.Printf("GET %s -> %s\n", string(k), string(v))
 
 	return v, nil
 }
