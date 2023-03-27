@@ -1,13 +1,14 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/mohamadafzal06/cache-in-go/cache"
+	"github.com/mohamadafzal06/cache-in-go/mproto"
 )
 
 type ServerOpts struct {
@@ -18,15 +19,15 @@ type ServerOpts struct {
 
 type Server struct {
 	ServerOpts
-	followers map[net.Conn]struct{}
-	cache     cache.Cacher
+	//	followers map[net.Conn]struct{}
+	cache cache.Cacher
 }
 
 func NewServer(opts ServerOpts, c cache.Cacher) *Server {
 	return &Server{
 		ServerOpts: opts,
-		followers:  make(map[net.Conn]struct{}),
-		cache:      c,
+		//	followers:  make(map[net.Conn]struct{}),
+		cache: c,
 	}
 
 }
@@ -38,20 +39,6 @@ func (s *Server) Start() error {
 	}
 
 	log.Printf("server starting on port [%s]\n", s.ListenAddr)
-
-	if !s.IsLeader {
-		go func() {
-			conn, err := net.Dial("tcp", s.LeaderAddr)
-			if err != nil {
-				log.Fatalf("cannot connect to leader: %v\n", err)
-			}
-
-			fmt.Println("connected with leader:", s.LeaderAddr)
-
-			s.handleConn(conn)
-		}()
-
-	}
 
 	for {
 		conn, err := ln.Accept()
@@ -67,100 +54,40 @@ func (s *Server) Start() error {
 func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 
-	buf := make([]byte, 2048)
-
-	// TODO: bad implementation: refactore it later
-	if s.IsLeader {
-		s.followers[conn] = struct{}{}
-	}
-
 	fmt.Println("connection made", conn.RemoteAddr())
+
 	for {
-		n, err := conn.Read(buf)
+		cmd, err := mproto.ParseCommand(conn)
 		if err != nil {
-			log.Printf("error while reading data from connection: %v", err)
-			continue
+			if err == io.EOF {
+				break
+			}
+			log.Println("parse command error: ", err)
+
+			break
 		}
 
-		msg := buf[:n]
-		go s.handleCommand(conn, msg)
-		fmt.Println(string(msg))
+		fmt.Println(cmd)
+
+		go s.handleCommand(conn, cmd)
+	}
+
+	fmt.Println("connection closed:", conn.RemoteAddr())
+}
+
+func (s *Server) handleCommand(conn net.Conn, cmd any) {
+	switch v := cmd.(type) {
+	case *mproto.CommandSet:
+		s.handleSetCommand(conn, v)
+	case *mproto.CommandGet:
 	}
 }
 
-func (s *Server) handleCommand(conn net.Conn, rawCmd []byte) {
-	msg, err := parseMessage(rawCmd)
-	if err != nil {
-		fmt.Println("failed to parse command")
-		return
+func (s *Server) handleSetCommand(conn net.Conn, cmd *mproto.CommandSet) error {
+	log.Printf("SET %s to %s\n", cmd.Key, cmd.Value)
+	if err := s.cache.Set(cmd.Key, cmd.Value, time.Duration(cmd.TTL)); err != nil {
+		return fmt.Errorf("cannot handle this set command: %w", err)
 	}
 
-	fmt.Printf("recieve command from %s\n", msg.Cmd)
-
-	switch msg.Cmd {
-	case CMDGet:
-		err = s.handleGetCmd(conn, msg)
-		if err != nil {
-			log.Println("failed to parse command", err)
-			conn.Write([]byte(err.Error()))
-			return
-		}
-	case CMDSet:
-		if bytes.Equal(msg.Value, []byte{}) {
-			log.Println("there is no value to set")
-			conn.Write([]byte(fmt.Sprintln("there is no value to set")))
-			return
-		}
-
-		err = s.handleSetCmd(conn, msg)
-		if err != nil {
-			log.Println("failed to parse command", err)
-			conn.Write([]byte(err.Error()))
-			return
-		}
-	}
-
-	//if err != nil {
-	//	log.Println("failed to parse command", err)
-	//	conn.Write([]byte(err.Error()))
-	//}
-}
-
-func (s *Server) handleSetCmd(conn net.Conn, msg *Message) error {
-	if err := s.cache.Set(msg.Key, msg.Value, msg.TTL); err != nil {
-		return fmt.Errorf("cannot set this key-value: %w", err)
-	}
-
-	go s.sendToFollowers(context.TODO(), msg)
-
-	return nil
-}
-
-func (s *Server) handleGetCmd(conn net.Conn, msg *Message) error {
-	value, err := s.cache.Get(msg.Key)
-	if err != nil {
-		return fmt.Errorf("cannot set this key[%s]-value[%s]: %w",
-			string(msg.Key),
-			string(msg.Value), err)
-	}
-
-	_, err = conn.Write(value)
-	if err != nil {
-		return fmt.Errorf("cannot get value of this key[%s]: %w", string(msg.Key), err)
-	}
-	return nil
-}
-
-func (s *Server) sendToFollowers(ctx context.Context, msg *Message) error {
-	for conn := range s.followers {
-		fmt.Println("forwarding key to follower")
-		rawMsg := msg.ToBytes()
-		fmt.Println("forwarding raw messag to follower", string(rawMsg))
-		_, err := conn.Write(rawMsg)
-		if err != nil {
-			log.Printf("cannot write to followers: %v\n", err)
-			continue
-		}
-	}
 	return nil
 }
